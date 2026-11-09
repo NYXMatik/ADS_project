@@ -1,0 +1,34 @@
+services:
+  db:
+    image: pgvector/pgvector:0.8.7-pg18
+    environment:
+      POSTGRES_USER: benchmark
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ads_benchmark
+    ports:
+      - '127.0.0.1:5433:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U benchmark -d ads_benchmark"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  client:
+    build: ./client
+    profiles: [tools]
+    environment:
+      PGHOST: db
+      PGPORT: '5432'
+      PGUSER: benchmark
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGDATABASE: ads_benchmark
+    volumes:
+      - ./output:/data:ro
+      - ./results:/results
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

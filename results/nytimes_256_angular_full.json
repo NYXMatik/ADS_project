@@ -1,0 +1,13 @@
+{
+  "dataset": "nytimes-256-angular",
+  "table": "nytimes_256_angular",
+  "rows_after_load": 290000,
+  "unique_ids": 290000,
+  "vector_dims_min": 256,
+  "vector_dims_max": 256,
+  "table_bytes": 339591168,
+  "copy_seconds": 10.567,
+  "sample_only": false,
+  "source_csv_bytes": 998481014,
+  "extra_columns": []
+}

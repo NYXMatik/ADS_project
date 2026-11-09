@@ -1,0 +1,47 @@
+{
+  "nytimes-256-angular": {
+    "category": "small_csv__small_vector",
+    "source": "ANN-Benchmarks",
+    "url": "https://ann-benchmarks.com/nytimes-256-angular.hdf5",
+    "rows": 290000,
+    "dimension": 256,
+    "distance": "angular (cosine)",
+    "classification": "candidate"
+  },
+  "glove-200-angular": {
+    "category": "medium_csv__small_vector",
+    "source": "ANN-Benchmarks",
+    "url": "https://ann-benchmarks.com/glove-200-angular.hdf5",
+    "rows": 1183514,
+    "dimension": 200,
+    "distance": "angular (cosine)",
+    "classification": "candidate"
+  },
+  "mnist-784-euclidean": {
+    "category": "small_csv__medium_vector",
+    "source": "ANN-Benchmarks",
+    "url": "https://ann-benchmarks.com/mnist-784-euclidean.hdf5",
+    "rows": 60000,
+    "dimension": 784,
+    "distance": "euclidean (L2)",
+    "classification": "size_below_1GB_candidate"
+  },
+  "coco-nomic-768-normalized": {
+    "category": "medium_csv__medium_vector",
+    "source": "VIBE",
+    "url": "https://huggingface.co/datasets/vector-index-bench/vibe/resolve/main/coco-nomic-768-normalized.hdf5",
+    "rows": 282360,
+    "dimension": 768,
+    "distance": "any (normalized), choose cosine",
+    "classification": "candidate"
+  },
+  "ccnews-nomic-768-normalized": {
+    "category": "alternative_medium_csv__medium_vector",
+    "source": "VIBE",
+    "url": "https://huggingface.co/datasets/vector-index-bench/vibe/resolve/main/ccnews-nomic-768-normalized.hdf5",
+    "rows": 495328,
+    "dimension": 768,
+    "distance": "any (normalized), choose cosine",
+    "classification": "alternative_may_exceed_4GB"
+  }
+}
