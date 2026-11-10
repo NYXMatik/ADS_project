@@ -12,8 +12,8 @@ ann_hdf5_to_csv/
   compose.yaml
   client/Dockerfile
   client/load.py
-  output/nytimes-256-angular/train.csv
-  output/nytimes-256-angular/manifest.json
+  data/nytimes-256-angular/train.csv
+  data/nytimes-256-angular/manifest.json
   results/  (created during import)
 ```
 

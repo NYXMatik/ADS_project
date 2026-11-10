@@ -18,4 +18,4 @@ foreach ($ds in $datasets) {
   & $python convert.py --dataset $ds --download --estimate --convert
   if ($LASTEXITCODE -ne 0) { throw "Failed on $ds" }
 }
-Write-Host 'Done. Inspect output/<dataset>/manifest.json for the measured CSV sizes.'
+Write-Host 'Done. Inspect data/<dataset>/manifest.json for the measured CSV sizes.'

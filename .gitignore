@@ -2,3 +2,6 @@
 __pycache__/
 *.py[cod]
 .env
+data/*
+!data/.gitkeep
+source/*.hdf5

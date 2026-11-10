@@ -20,7 +20,7 @@ from psycopg import sql
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--dataset', required=True, help='Subfolder of output/, e.g. nytimes-256-angular')
+    p.add_argument('--dataset', required=True, help='Subfolder of data/, e.g. nytimes-256-angular')
     p.add_argument('--limit', type=int, default=None, help='Smoke test only, not for final benchmark')
     p.add_argument('--reset', action='store_true', help='DROP and re-create this dataset table')
     a = p.parse_args()

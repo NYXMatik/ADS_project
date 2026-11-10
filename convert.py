@@ -220,7 +220,7 @@ def main():
     p.add_argument('--convert', action='store_true', help='Export all benchmark data to CSV')
     p.add_argument('--limit-rows', type=int, help='ONLY for smoke test, invalidates ground truth')
     p.add_argument('--source-dir',type=Path,default=ROOT/'source')
-    p.add_argument('--output-dir',type=Path,default=ROOT/'output')
+    p.add_argument('--output-dir',type=Path,default=ROOT/'data')
     p.add_argument('--chunk-rows',type=int,default=256)
     p.add_argument('--list', action='store_true')
     args=p.parse_args()

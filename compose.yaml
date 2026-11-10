@@ -24,7 +24,7 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       PGDATABASE: ads_benchmark
     volumes:
-      - ./output:/data:ro
+      - ./data:/data:ro
       - ./results:/results
     depends_on:
       db:

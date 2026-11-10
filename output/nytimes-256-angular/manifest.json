@@ -1,6 +1,0 @@
-
-{
-  "dataset": "nytimes-256-angular",
-  "dimension": 256,
-  "train_rows": 290000
-}
