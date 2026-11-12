@@ -33,6 +33,7 @@ from pathlib import Path
 import shutil
 import time
 
+import h5py
 import numpy as np
 import pyarrow as pa
 import pyarrow.csv as pacsv
@@ -42,6 +43,7 @@ import pyarrow.parquet as pq
 ROOT = Path(__file__).resolve().parent
 CHUNK = 50_000
 SAMPLE_ROWS = 10_000
+GT_MAX_ERR = [0.0]  # largest |float64 source - float32 written| seen in ground-truth distances
 
 
 # ---------------------------------------------------------------- CSV writing
@@ -102,11 +104,12 @@ def write_ground_truth(path, ids, dists=None, blocks=None):
         if db is None:
             dist_col = pa.array([''] * (q * k), pa.string())
         else:
+            # distances are always written as float32 (9 significant digits)
             flat = db.ravel()
             f32 = flat.astype(np.float32)
-            exact = bool(((f32.astype(np.float64) == flat) | np.isnan(flat)).all())
-            fmt = '%.9g' if exact else '%.17g'
-            dist_col = pa.array(['' if x != x else fmt % x for x in (f32 if exact else flat).tolist()], pa.string())
+            err = float(np.nanmax(np.abs(f32.astype(np.float64) - flat))) if flat.size else 0.0
+            GT_MAX_ERR[0] = max(GT_MAX_ERR[0], err)
+            dist_col = pa.array(['' if x != x else '%.9g' % x for x in f32.tolist()], pa.string())
         w.write(pa.table({
             'query_id': pa.array(np.repeat(np.arange(q0, q0 + q), k), pa.int64()),
             'rank': pa.array(np.tile(np.arange(k), q), pa.int64()),
@@ -357,6 +360,58 @@ def run_parquet(a, out, limit_rows=None, train_only=False):
     return info, sizes, n
 
 
+def run_hdf5(a, out, limit_rows=None, train_only=False):
+    """ANN-Benchmarks / VIBE HDF5: train, test, neighbors, optional distances / avg_distances."""
+    t0 = time.monotonic()
+    sizes = {}
+    with h5py.File(a.input, 'r') as h:
+        known = {'train', 'test', 'neighbors', 'distances', 'avg_distances'}
+        extra = sorted(k for k in h if k not in known)
+        if extra:
+            raise ValueError('Unknown HDF5 datasets would be lost: ' + ', '.join(extra))
+        train, test, nbr = h['train'], h['test'], h['neighbors']
+        dist = h['distances'] if 'distances' in h else None
+        if train.dtype != np.float32 or test.dtype != np.float32:
+            raise ValueError('only float32 vectors are supported')
+        if test.shape[1] != train.shape[1] or nbr.shape[0] != test.shape[0] or (dist is not None and dist.shape != nbr.shape):
+            raise ValueError('train/test/neighbors shapes do not match')
+        info = {'format': 'hdf5', 'train_rows': int(train.shape[0]), 'queries': int(test.shape[0]),
+                'dimension': int(train.shape[1]), 'neighbors_per_query': int(nbr.shape[1]),
+                'has_distances': dist is not None, 'has_avg_distances': 'avg_distances' in h}
+        print(info, flush=True)
+
+        def chunks(ds, limit=None):
+            n = len(ds) if limit is None else min(len(ds), limit)
+            for lo in range(0, n, CHUNK):
+                yield np.array(ds[lo:min(n, lo + CHUNK)])
+        n = int(train.shape[0])
+        if not a.ground_truth_only:
+            n, sizes['train.csv'] = write_vectors(out / 'train.csv', chunks(train, limit_rows))
+        if not train_only:
+            if not a.ground_truth_only:
+                _, sizes['test.csv'] = write_vectors(out / 'test.csv', chunks(test))
+            if int(nbr[:].max()) >= train.shape[0]:
+                raise ValueError('ground-truth ids out of range')
+            blocks = ((np.array(nbr[lo:lo + CHUNK]).astype(np.int64),
+                       np.array(dist[lo:lo + CHUNK]).astype(np.float64) if dist is not None else None)
+                      for lo in range(0, nbr.shape[0], CHUNK))
+            sizes['ground_truth.csv'] = write_ground_truth(out / 'ground_truth.csv', None, blocks=blocks)
+            info['ground_truth_max_float32_rounding_error'] = GT_MAX_ERR[0]
+            if 'avg_distances' in h:
+                avg = h['avg_distances']
+                if len(avg) != test.shape[0]:
+                    raise ValueError('avg_distances count != number of test queries')
+                w = CsvWriter(out / 'avg_distances.csv', ['query_id', 'avg_distance'], quote=False)
+                f32 = avg.dtype.itemsize <= 4
+                vals = np.array(avg[:])
+                w.write(pa.table({'query_id': pa.array(np.arange(len(vals)), pa.int64()),
+                                  'avg_distance': pa.array([('%.9g' if f32 else '%.17g') % x for x in vals.tolist()])}))
+                sizes['avg_distances.csv'] = w.close()
+    info.update(distance='from source' if dist is not None else 'none in source',
+                elapsed_s=round(time.monotonic() - t0, 1))
+    return info, sizes, n
+
+
 def estimate(a, runner):
     out = a.output_dir / a.name / '_sample'
     out.mkdir(parents=True, exist_ok=True)
@@ -371,9 +426,9 @@ def estimate(a, runner):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('--format', choices=['bigann', 'parquet'], required=True)
+    p.add_argument('--format', choices=['bigann', 'parquet', 'hdf5'], required=True)
     p.add_argument('--name', required=True, help='output goes to <output-dir>/<name>/')
-    p.add_argument('--input', type=Path, help='parquet: directory with data/*.parquet and neighbors.parquet')
+    p.add_argument('--input', type=Path, help='parquet: directory with data/*.parquet and neighbors.parquet; hdf5: the .hdf5 file')
     p.add_argument('--train', type=Path, help='bigann: base .fbin')
     p.add_argument('--test', type=Path, help='bigann: query .fbin')
     p.add_argument('--neighbors', type=Path, help='bigann: ground-truth .ibin')
@@ -387,23 +442,28 @@ def main():
     p.add_argument('--distance', choices=['cosine', 'ip', 'l2'], default='cosine',
                    help='metric used to compute missing ground-truth distances (parquet)')
     p.add_argument('--output-dir', type=Path, default=ROOT / 'data')
+    p.add_argument('--ground-truth-only', action='store_true',
+                   help='hdf5: rewrite only ground_truth.csv (and avg_distances.csv); keeps train/test/manifest')
     p.add_argument('--estimate', action='store_true', help='convert 10,000 rows, extrapolate train.csv size')
     p.add_argument('--convert', action='store_true')
     a = p.parse_args()
     if not (a.estimate or a.convert):
         p.error('Provide --estimate and/or --convert')
-    if a.format == 'parquet' and not a.input:
-        p.error('--format parquet needs --input')
+    if a.format in ('parquet', 'hdf5') and not a.input:
+        p.error(f'--format {a.format} needs --input')
     if a.format == 'bigann' and not (a.train and a.test and a.neighbors):
         p.error('--format bigann needs --train, --test and --neighbors')
-    runner = run_bigann if a.format == 'bigann' else run_parquet
+    runner = {'bigann': run_bigann, 'parquet': run_parquet, 'hdf5': run_hdf5}[a.format]
     out = a.output_dir / a.name
     full = None
     if a.estimate or a.convert:
-        full, _ = estimate(a, runner)
+        full = estimate(a, runner)[0] if not a.ground_truth_only else 0
     if a.convert:
         check_space(int(full * 1.4), out)
         info, sizes, n = runner(a, out)
+        if a.ground_truth_only:
+            print('Rewrote', sizes, 'max float32 rounding error', info.get('ground_truth_max_float32_rounding_error'))
+            return
         info.update(output_bytes=sizes, train_csv_gb=round(sizes['train.csv'] / 1e9, 6),
                     float_format='%.9g (float32 round trip)')
         (out / 'manifest.json').write_text(json.dumps(info, indent=2), encoding='utf-8')
